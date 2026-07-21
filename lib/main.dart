@@ -7,7 +7,7 @@ import 'package:mabarscore/views/auth/splash_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mabarscore/views/main_navigation.dart';
 
-// Handler background FCM
+// Handler background FCM Notif
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
   print("Handling a background message: ${message.messageId}");
