@@ -1,0 +1,63 @@
+{
+  "project_info": {
+    "project_number": "679942692535",
+    "project_id": "mabarscore",
+    "storage_bucket": "mabarscore.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:679942692535:android:aab27fe02eccfc1dfdf732",
+        "android_client_info": {
+          "package_name": "com.mabarscore.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "679942692535-0u81cdg2oe5t22mg6kgmh5cskdd2klfb.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.mabarscore.app",
+            "certificate_hash": "0017fc6fdeb7df6e55b0bd66a2264590c14a1bd9"
+          }
+        },
+        {
+          "client_id": "679942692535-i58pnd8gd27qvaa47midv15tgf0lj9g8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.mabarscore.app",
+            "certificate_hash": "5f2e096e82434c915e3b3a48f1615a31821b00af"
+          }
+        },
+        {
+          "client_id": "679942692535-iim9fpqfia7mpduomeaqb7rg8se309fe.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.mabarscore.app",
+            "certificate_hash": "619b876811386efe9f4dd2889cdf67cfb2738991"
+          }
+        },
+        {
+          "client_id": "679942692535-5565564aum4g6u9k81dk237pksg5bfa0.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCy4iUp8BwOLGPPj7uQLo4_elGPIkCKG4Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "679942692535-5565564aum4g6u9k81dk237pksg5bfa0.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
