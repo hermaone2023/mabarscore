@@ -500,6 +500,7 @@ class _UploadReportViewState extends State<UploadReportView> {
     );
   }
 
+  // _buildStatusCard
   Widget _buildStatusCard({
     required String statusName,
     required IconData icon,

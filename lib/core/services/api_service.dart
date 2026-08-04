@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
 import 'package:mabarscore/core/models/player_model.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
   // Domain server produksi kawan yang sudah HTTPS mantap!
@@ -584,5 +585,43 @@ class ApiService {
       print("Error saat parsing JSON atau koneksi: $e");
     }
     return false;
+  }
+
+  static Future<String> getKategoriHeroKesepakatan() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final int arenaId = prefs.getInt('match_arena_id') ?? 0;
+      final int batchId = prefs.getInt('match_batch_id') ?? 0;
+      final int round = prefs.getInt('match_round') ?? 0;
+      final int matchNumber = prefs.getInt('match_number') ?? 0;
+
+      if (arenaId == 0 || batchId == 0) {
+        return "Data pertandingan tidak ditemukan";
+      }
+
+      // Menggunakan baseUrl yang sudah didefinisikan di ApiService
+      final response = await http.post(
+        Uri.parse('$baseUrl/kategori_hero.php'),
+        body: {
+          'arena_id': arenaId.toString(),
+          'batch_id': batchId.toString(),
+          'round': round.toString(),
+          'match_number': matchNumber.toString(),
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['status'] == true) {
+          return data['kategori_hero'] ?? '-';
+        } else {
+          return '-';
+        }
+      } else {
+        return "Gagal memuat";
+      }
+    } catch (e) {
+      return "Error koneksi";
+    }
   }
 }

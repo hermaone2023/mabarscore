@@ -5,10 +5,20 @@
 <uses-permission android:name="android.permission.VIBRATE" />
 <uses-permission android:name="android.permission.INTERNET" />
 <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+<uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+<uses-permission android:name="android.permission.RECORD_AUDIO" />
     <application
         android:label="mabarscore"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon">
+
+        <service
+            android:name="flutter.overlay.window.flutter_overlay_window.OverlayService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
+
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

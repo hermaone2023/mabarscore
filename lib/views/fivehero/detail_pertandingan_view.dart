@@ -1,9 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_overlay_window/flutter_overlay_window.dart';
+import 'package:flutter_screen_recording/flutter_screen_recording.dart';
+import 'package:gal/gal.dart';
 import 'package:http/http.dart' as http;
 import 'package:mabarscore/core/constants/app_colors.dart';
 import 'dart:convert';
 
 import 'package:mabarscore/views/fivehero/fivehero_arena_chats.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart'
+    hide NotificationVisibility;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class DetailPertandinganView extends StatefulWidget {
   final String arenaId;
@@ -29,12 +38,222 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView> {
   late int
   _currentRound; // 🔥 Gunakan late agar diinisialisasi dari widget di awal
 
+  // 🔥 Ubah parameter agar menerima nama file String dengan benar
+  Future<void> _startMainRecording(String fileName) async {
+    await Permission.storage.request();
+    await Permission.microphone.request();
+    await Permission.notification.request();
+
+    try {
+      // 🔥 Perbaikan konfigurasi tanpa parameter 'icon' yang salah
+      FlutterForegroundTask.init(
+        androidNotificationOptions: AndroidNotificationOptions(
+          channelId: 'mabarscore_recording_channel',
+          channelName: 'MabarScore Recording Channel',
+          channelDescription: 'Channel untuk perekaman layar pertandingan',
+          channelImportance: NotificationChannelImportance.HIGH,
+          priority: NotificationPriority.HIGH,
+        ),
+        iosNotificationOptions: const IOSNotificationOptions(
+          showNotification: true,
+          playSound: false,
+        ),
+        foregroundTaskOptions: ForegroundTaskOptions(
+          eventAction: ForegroundTaskEventAction.nothing(),
+          allowWakeLock: true,
+          allowWifiLock: true,
+        ),
+      );
+
+      // 🔥 Memulai service tanpa callback error 'startCallback' yang tidak terdefinisi
+      if (await FlutterForegroundTask.isRunningService) {
+        await FlutterForegroundTask.restartService();
+      } else {
+        await FlutterForegroundTask.startService(
+          notificationTitle: 'MabarScore Sedang Merekam',
+          notificationText:
+              'Perekaman pertandingan sedang berjalan di latar belakang.',
+        );
+      }
+
+      print("Mulai mencoba merekam layar dengan nama: $fileName");
+
+      bool started = await FlutterScreenRecording.startRecordScreen(fileName);
+
+      if (started) {
+        setState(() {});
+        print("Perekaman layar utama berhasil dimulai!");
+      } else {
+        print("Uji Coba: Perekaman ditolak atau gagal dimulai oleh sistem.");
+      }
+    } catch (e) {
+      print("Gagal memulai perekaman utama (Exception): $e");
+    }
+  }
+
+  Future<void> _stopMainRecording() async {
+    try {
+      print("Mengehentikan perekaman utama dan mengambil path video...");
+
+      final prefs = await SharedPreferences.getInstance();
+
+      int? arenaId = prefs.getInt('match_arena_id');
+      int? batchId = prefs.getInt('match_batch_id');
+      int? round = prefs.getInt('match_round');
+      int? matchNumber = prefs.getInt('match_number');
+
+      if (arenaId == null || batchId == null || matchNumber == null) {
+        print("Gagal: Parameter unik match tidak lengkap di sesi aktif!");
+        return;
+      }
+
+      String path = await FlutterScreenRecording.stopRecordScreen;
+      print("Path video hasil rekaman: '$path'");
+
+      // Hentikan foreground service karena perekaman sudah selesai
+      await FlutterForegroundTask.stopService();
+
+      if (path.isEmpty) {
+        print("Gagal: Path video kosong dari sistem!");
+        return;
+      }
+
+      bool hasAccess = await Gal.hasAccess();
+      if (!hasAccess) {
+        await Gal.requestAccess();
+      }
+      await Gal.putVideo(path, album: "MabarScore");
+
+      // 🔥 UPLOAD KE SERVER
+      await _uploadVideoToServer(
+        arenaId: arenaId,
+        batchId: batchId,
+        round: round ?? 1,
+        matchNumber: matchNumber,
+        videoPath: path,
+      );
+
+      await prefs.remove('match_arena_id');
+      await prefs.remove('match_batch_id');
+      await prefs.remove('match_round');
+      await prefs.remove('match_number');
+    } catch (e) {
+      print("Gagal menghentikan atau menyimpan rekaman (Exception): $e");
+      await FlutterForegroundTask.stopService();
+    }
+  }
+
+  // Fungsi helper HTTP Multipart Upload
+  Future<void> _uploadVideoToServer({
+    required int arenaId,
+    required int batchId,
+    required int round,
+    required int matchNumber,
+    required String videoPath,
+  }) async {
+    try {
+      print("Mengunggah video pertandingan ke server...");
+
+      var uri = Uri.parse(
+        'https://donorta.tech/apimabarscore/upload_match_video.php',
+      );
+
+      var request = http.MultipartRequest('POST', uri);
+
+      // Kirimkan parameter pengenal baris tabel sebagai fields
+      request.fields['arena_id'] = arenaId.toString();
+      request.fields['batch_id'] = batchId.toString();
+      request.fields['round'] = round.toString();
+      request.fields['match_number'] = matchNumber.toString();
+
+      // File video dikirim dengan key 'video_file'
+      request.files.add(
+        await http.MultipartFile.fromPath('video_file', videoPath),
+      );
+
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+
+      print("Response Status Code: ${response.statusCode}");
+      print("Response Body Mentah: '${response.body}'");
+
+      if (response.statusCode == 200) {
+        print(
+          "SUKSES! Video berhasil di-upload dan tersimpan di kolom video_pertandingan.",
+        );
+      } else {
+        print("Gagal upload ke server: ${response.body}");
+      }
+    } catch (e) {
+      print("Error saat mengunggah video ke server: $e");
+    }
+  }
+
+  Future<void> _startMatchAndShowOverlay({
+    required int arenaId,
+    required int batchId,
+    required int round,
+    required int matchNumber,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      // Simpan parameter komposit pengenal baris match
+      await prefs.setInt('match_arena_id', arenaId);
+      await prefs.setInt('match_batch_id', batchId);
+      await prefs.setInt('match_round', round);
+      await prefs.setInt('match_number', matchNumber);
+      bool isGranted = await FlutterOverlayWindow.isPermissionGranted();
+      if (!isGranted) {
+        await FlutterOverlayWindow.requestPermission();
+        return;
+      }
+
+      bool isActive = await FlutterOverlayWindow.isActive();
+      if (!isActive) {
+        await FlutterOverlayWindow.showOverlay(
+          height: 660,
+          width: 550, // 💡 Kunci lebar di 360 agar pas dan tidak overflow
+          alignment: OverlayAlignment.centerRight,
+          flag: OverlayFlag.defaultFlag,
+          visibility: NotificationVisibility.visibilityPublic,
+          positionGravity: PositionGravity.none,
+          enableDrag: true,
+        );
+      }
+    } catch (e) {
+      print("Error memunculkan overlay: $e");
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _currentRound =
         widget.currentRound; // 🔥 Ambil babak awal dari parameter widget kawan
     _fetchMatchDetails();
+    // 🔥 Pantau sinyal START dan STOP secara bersamaan di Activity utama
+    Timer.periodic(const Duration(milliseconds: 200), (timer) async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+
+      bool shouldStart = prefs.getBool('start_recording_signal') ?? false;
+      bool shouldStop = prefs.getBool('stop_recording_signal') ?? false;
+
+      if (shouldStart) {
+        await prefs.setBool('start_recording_signal', false);
+        print("Sinyal START terdeteksi di Activity utama!");
+        String fileName = "MabarScore_${DateTime.now().millisecondsSinceEpoch}";
+        await _startMainRecording(fileName);
+      }
+
+      if (shouldStop) {
+        await prefs.setBool('stop_recording_signal', false);
+        print(
+          "Sinyal STOP terdeteksi di Activity utama! Mengeksekusi _stopMainRecording()...",
+        );
+        await _stopMainRecording(); // 🔥 Dijalankan di sini agar plugin terbaca dengan normal!
+      }
+    });
   }
 
   Future<void> _fetchMatchDetails() async {
@@ -291,11 +510,6 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView> {
                                       _matchData['match1']?['player1']?['nickname'],
                                   imgPlayerLeft:
                                       _matchData['match1']?['player1']?['image'],
-                                  statusSiapLeft: int.tryParse(
-                                    _matchData['match1']?['player_1_id_siap']
-                                            .toString() ??
-                                        '0',
-                                  ),
                                   labelPlayerRight: "Player 2",
                                   googleIdRight:
                                       _matchData['match1']?['player2']?['google_id'],
@@ -303,11 +517,17 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView> {
                                       _matchData['match1']?['player2']?['nickname'],
                                   imgPlayerRight:
                                       _matchData['match1']?['player2']?['image'],
-                                  statusSiapRight: int.tryParse(
-                                    _matchData['match1']?['player_2_id_siap']
+                                  statusSiapLeft: int.tryParse(
+                                    _matchData['match1']?['status_kesiapan']
                                             .toString() ??
                                         '0',
                                   ),
+                                  statusSiapRight: int.tryParse(
+                                    _matchData['match1']?['status_kesiapan']
+                                            .toString() ??
+                                        '0',
+                                  ),
+                                  matchItemData: _matchData['match1'],
                                 ),
                                 const SizedBox(height: 20),
                               ],
@@ -331,11 +551,6 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView> {
                                       _matchData['match2']?['player1']?['nickname'],
                                   imgPlayerLeft:
                                       _matchData['match2']?['player1']?['image'],
-                                  statusSiapLeft: int.tryParse(
-                                    _matchData['match2']?['player_1_id_siap']
-                                            .toString() ??
-                                        '0',
-                                  ),
                                   labelPlayerRight: "Player 4",
                                   googleIdRight:
                                       _matchData['match2']?['player2']?['google_id'],
@@ -343,16 +558,22 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView> {
                                       _matchData['match2']?['player2']?['nickname'],
                                   imgPlayerRight:
                                       _matchData['match2']?['player2']?['image'],
-                                  statusSiapRight: int.tryParse(
-                                    _matchData['match2']?['player_2_id_siap']
+                                  statusSiapLeft: int.tryParse(
+                                    _matchData['match2']?['status_kesiapan']
                                             .toString() ??
                                         '0',
                                   ),
+                                  statusSiapRight: int.tryParse(
+                                    _matchData['match2']?['status_kesiapan']
+                                            .toString() ??
+                                        '0',
+                                  ),
+                                  matchItemData: _matchData['match2'],
                                 ),
                                 const SizedBox(height: 20),
                               ],
 
-                              // --- MATCH 3 ---
+                              // --- MATCH 3 (Status Berlangsung dalam JSON) ---
                               if (_matchData['match3'] != null) ...[
                                 _buildMatchHeader(
                                   _currentRound == 4
@@ -373,11 +594,6 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView> {
                                       _matchData['match3']?['player1']?['nickname'],
                                   imgPlayerLeft:
                                       _matchData['match3']?['player1']?['image'],
-                                  statusSiapLeft: int.tryParse(
-                                    _matchData['match3']?['player_1_id_siap']
-                                            .toString() ??
-                                        '0',
-                                  ),
                                   labelPlayerRight: "Juara M2",
                                   googleIdRight:
                                       _matchData['match3']?['player2']?['google_id'],
@@ -385,16 +601,22 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView> {
                                       _matchData['match3']?['player2']?['nickname'],
                                   imgPlayerRight:
                                       _matchData['match3']?['player2']?['image'],
-                                  statusSiapRight: int.tryParse(
-                                    _matchData['match3']?['player_2_id_siap']
+                                  statusSiapLeft: int.tryParse(
+                                    _matchData['match3']?['status_kesiapan']
                                             .toString() ??
                                         '0',
                                   ),
+                                  statusSiapRight: int.tryParse(
+                                    _matchData['match3']?['status_kesiapan']
+                                            .toString() ??
+                                        '0',
+                                  ),
+                                  matchItemData: _matchData['match3'],
                                 ),
                                 const SizedBox(height: 20),
                               ],
 
-                              // --- MATCH 4 (GRAND FINAL) ---
+                              // --- MATCH 4 (Player 1 Null / Belum Mulai dalam JSON) ---
                               if (_matchData['match4'] != null) ...[
                                 _buildMatchHeader(
                                   _currentRound == 4
@@ -412,16 +634,11 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView> {
                                       ? "Finalis 1"
                                       : "Juara M3",
                                   googleIdLeft:
-                                      _matchData['match4']?['player1']?['google_id'],
+                                      _matchData['match4']?['player1']?['google_id'], // Aman walau bernilai null
                                   namePlayerLeft:
-                                      _matchData['match4']?['player1']?['nickname'],
+                                      _matchData['match4']?['player1']?['nickname'], // Aman walau bernilai null
                                   imgPlayerLeft:
-                                      _matchData['match4']?['player1']?['image'],
-                                  statusSiapLeft: int.tryParse(
-                                    _matchData['match4']?['player_1_id_siap']
-                                            .toString() ??
-                                        '0',
-                                  ),
+                                      _matchData['match4']?['player1']?['image'], // Aman walau bernilai null
                                   labelPlayerRight: _currentRound == 4
                                       ? "Finalis 2"
                                       : "Player 5",
@@ -431,89 +648,21 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView> {
                                       _matchData['match4']?['player2']?['nickname'],
                                   imgPlayerRight:
                                       _matchData['match4']?['player2']?['image'],
-                                  statusSiapRight: int.tryParse(
-                                    _matchData['match4']?['player_2_id_siap']
+                                  isGrandFinal: true,
+                                  statusSiapLeft: int.tryParse(
+                                    _matchData['match4']?['status_kesiapan']
                                             .toString() ??
                                         '0',
                                   ),
-                                  isGrandFinal:
-                                      true, // Efek warna gradasi emas ungu kawan
+                                  statusSiapRight: int.tryParse(
+                                    _matchData['match4']?['status_kesiapan']
+                                            .toString() ??
+                                        '0',
+                                  ),
+                                  matchItemData: _matchData['match4'],
                                 ),
+                                const SizedBox(height: 20),
                               ],
-
-                              const SizedBox(height: 35),
-
-                              // Tombol Chat Link
-                              Center(
-                                child: RichText(
-                                  textAlign: TextAlign.center,
-                                  text: TextSpan(
-                                    style: const TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 14,
-                                      height: 1.4,
-                                    ),
-                                    children: [
-                                      const TextSpan(
-                                        text:
-                                            "Buat kesepakatan dengan lawan tandingmu sebelum memulai tanding",
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 3),
-                              GestureDetector(
-                                onTap: () {
-                                  String idLawan = _cariGoogleIdLawan();
-
-                                  // Ambil objek match yang benar (sama seperti cara sebelumnya)
-                                  Map<String, dynamic>? selectedMatch;
-                                  _matchData.forEach((key, value) {
-                                    if (value != null &&
-                                        (value['player1']?['google_id'] ==
-                                                widget.currentGoogleId ||
-                                            value['player2']?['google_id'] ==
-                                                widget.currentGoogleId)) {
-                                      selectedMatch = value;
-                                    }
-                                  });
-
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => FiveheroChatView(
-                                        arenaId: widget.arenaId,
-                                        currentGoogleId: widget.currentGoogleId,
-                                        opponentGoogleId: idLawan,
-                                        matchData:
-                                            selectedMatch ??
-                                            {}, // 🔥 KIRIM DATA DI SINI
-                                      ),
-                                    ),
-                                  ).then((value) {
-                                    // Ini akan dipanggil saat kita kembali dari chat
-                                    _fetchMatchDetails(); // Panggil fungsi untuk ambil ulang data dari server
-                                  });
-                                },
-                                child: Container(
-                                  width: double.infinity,
-                                  padding: EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: const Color.fromARGB(207, 5, 46, 79),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      'Buat Kesepakatan!',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
                               const SizedBox(height: 35),
                             ],
                           ),
@@ -582,9 +731,30 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView> {
     String? namePlayerRight,
     String? imgPlayerRight,
     bool isGrandFinal = false,
-    int? statusSiapLeft, // 🔥 TAMBAH INI
-    int? statusSiapRight, // 🔥 TAMBAH INI
+    int? statusSiapLeft,
+    int? statusSiapRight,
+    required Map<String, dynamic> matchItemData,
   }) {
+    // 1. Tentukan siapa pemain di match ini berdasarkan google_id
+    bool isUserLeft = widget.currentGoogleId == googleIdLeft;
+    bool isUserRight = widget.currentGoogleId == googleIdRight;
+    bool isParticipant = isUserLeft || isUserRight;
+
+    // 2. Tentukan siapa ID lawannya
+    String idLawan = isUserLeft ? (googleIdRight ?? '') : (googleIdLeft ?? '');
+
+    // 3. Ambil status match & status kesiapan langsung dari key JSON
+    String statusMatch = matchItemData['status_match'] ?? 'belum mulai';
+    bool matchSelesai =
+        statusMatch == 'selesai' ||
+        (pemenangId != null && pemenangId.isNotEmpty);
+    bool matchBerlangsung = statusMatch == 'berlangsung';
+
+    // Ambil status_kesiapan (konversi ke int dengan aman, default 0)
+    int statusKesiapan =
+        int.tryParse(matchItemData['status_kesiapan']?.toString() ?? '0') ?? 0;
+    bool isSudahSepakat = statusKesiapan == 1;
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
       decoration: BoxDecoration(
@@ -607,36 +777,243 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView> {
           width: isGrandFinal ? 1.5 : 1.0,
         ),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+      child: Column(
         children: [
-          _buildPlayerSlot(
-            labelPlayerLeft,
-            namePlayerLeft,
-            imgPlayerLeft,
-            googleIdLeft,
-            pemenangId,
-            Colors.amber,
-            isGrandFinal,
-            statusSiapLeft, // 🔥 Tambahkan statusSiapLeft
+          // Row Utama Player Kiri & Kanan
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildPlayerSlot(
+                labelPlayerLeft,
+                namePlayerLeft,
+                imgPlayerLeft,
+                googleIdLeft,
+                pemenangId,
+                Colors.amber,
+                isGrandFinal,
+                statusSiapLeft,
+              ),
+              const Text(
+                "VS",
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w300,
+                  color: Colors.white60,
+                ),
+              ),
+              _buildPlayerSlot(
+                labelPlayerRight,
+                namePlayerRight,
+                imgPlayerRight,
+                googleIdRight,
+                pemenangId,
+                Colors.blueAccent,
+                isGrandFinal,
+                statusSiapRight,
+              ),
+            ],
           ),
-          const Text(
-            "VS",
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w300,
-              color: Colors.white60,
+
+          const SizedBox(height: 14),
+          const Divider(color: Colors.white24, height: 1),
+          const SizedBox(height: 10),
+
+          // 🔥 TOMBOL KESEPAKATAN / MULAI TANDING
+          // 🔥 TOMBOL KESEPAKATAN / MULAI TANDING
+          GestureDetector(
+            onTap: () async {
+              // 🛡️ 1. VALIDASI UTAMA: Apakah user adalah peserta sah? Jika bukan, langsung TOLAK!
+              if (!isParticipant) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Akses ditolak! Anda bukan peserta yang bertanding di match ini.',
+                    ),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
+              // 2. Cek apakah match sudah selesai
+              if (matchSelesai) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Match ini telah selesai! Kesepakatan ditutup.',
+                    ),
+                    backgroundColor: Colors.grey,
+                  ),
+                );
+                return;
+              }
+
+              // 3. Cek apakah match sedang berlangsung
+              if (!matchBerlangsung) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Match belum dimulai atau belum waktunya bertanding!',
+                    ),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+                return;
+              }
+
+              // 4. Apakah slot player lengkap
+              if (googleIdLeft == null ||
+                  googleIdRight == null ||
+                  googleIdLeft.isEmpty ||
+                  googleIdRight.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Lawan tanding di match ini belum lengkap/tersedia!',
+                    ),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+                return;
+              }
+
+              // 5. Pastikan ID lawan valid
+              if (idLawan.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('ID lawan tanding tidak valid!'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
+              // 6. Jika sudah sepakat sebagai peserta, jalankan mulai tanding & overlay
+              if (isSudahSepakat) {
+                final int arenaId =
+                    int.tryParse(
+                      matchItemData['arena_id']?.toString() ?? '0',
+                    ) ??
+                    0;
+                final int batchId =
+                    int.tryParse(
+                      matchItemData['batch_id']?.toString() ?? '0',
+                    ) ??
+                    0;
+                final int round =
+                    int.tryParse(matchItemData['round']?.toString() ?? '1') ??
+                    1;
+                final int matchNumber =
+                    int.tryParse(
+                      matchItemData['match_number']?.toString() ?? '0',
+                    ) ??
+                    0;
+
+                await _startMatchAndShowOverlay(
+                  arenaId: arenaId,
+                  batchId: batchId,
+                  round: round,
+                  matchNumber: matchNumber,
+                );
+                return;
+              }
+
+              // Jika belum sepakat, buka halaman chat kesepakatan
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => FiveheroChatView(
+                    arenaId: widget.arenaId,
+                    currentGoogleId: widget.currentGoogleId,
+                    opponentGoogleId: idLawan,
+                    matchData: matchItemData,
+                  ),
+                ),
+              );
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 9),
+              decoration: BoxDecoration(
+                // 🎨 Perbaikan Warna Berdasarkan Kepemilikan Match (isParticipant)
+                color: !isParticipant
+                    ? Colors.grey.withValues(alpha: 0.1)
+                    : (matchSelesai || !matchBerlangsung
+                          ? Colors.grey.withValues(alpha: 0.15)
+                          : (isSudahSepakat
+                                ? const Color.fromARGB(
+                                    255,
+                                    18,
+                                    120,
+                                    164,
+                                  ).withValues(alpha: 0.25)
+                                : const Color(0xFF145347))),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: !isParticipant
+                      ? Colors.white12
+                      : (matchSelesai || !matchBerlangsung
+                            ? Colors.white24
+                            : (isSudahSepakat
+                                  ? const Color.fromARGB(
+                                      255,
+                                      128,
+                                      255,
+                                      0,
+                                    ).withValues(alpha: 0.7)
+                                  : Colors.greenAccent.withValues(alpha: 0.6))),
+                ),
+              ),
+              child: Center(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      !isParticipant
+                          ? Icons.lock_outline
+                          : (matchSelesai
+                                ? Icons.check_circle_outline
+                                : (!matchBerlangsung
+                                      ? Icons.timer_outlined
+                                      : (isSudahSepakat
+                                            ? Icons.play_arrow
+                                            : Icons.handshake))),
+                      color: !isParticipant
+                          ? Colors.white38
+                          : (matchSelesai || !matchBerlangsung
+                                ? Colors.white38
+                                : (isSudahSepakat
+                                      ? const Color.fromARGB(255, 149, 255, 0)
+                                      : Colors.greenAccent)),
+                      size: 16,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      !isParticipant
+                          ? 'Bukan Match Anda'
+                          : (matchSelesai
+                                ? 'Match Telah Selesai'
+                                : (!matchBerlangsung
+                                      ? 'Match Belum Dimulai'
+                                      : (isSudahSepakat
+                                            ? 'Mulai Tanding'
+                                            : 'Buat Kesepakatan Match Ini'))),
+                      style: TextStyle(
+                        color: !isParticipant
+                            ? Colors.white38
+                            : (matchSelesai || !matchBerlangsung
+                                  ? Colors.white38
+                                  : (isSudahSepakat
+                                        ? const Color.fromARGB(255, 81, 255, 0)
+                                        : Colors.greenAccent)),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
-          _buildPlayerSlot(
-            labelPlayerRight,
-            namePlayerRight,
-            imgPlayerRight,
-            googleIdRight,
-            pemenangId,
-            Colors.blueAccent,
-            isGrandFinal,
-            statusSiapRight, // 🔥 Tambahkan statusSiapRight
           ),
         ],
       ),

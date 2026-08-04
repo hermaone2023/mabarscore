@@ -544,8 +544,8 @@ class _FiveheroViewState extends State<FiveheroView> {
             const SizedBox(height: 14),
             Text(
               currentRound == 1
-                  ? "Jadilah juara arena untuk menuju babak berikutnya hingga kamu berada dipuncak arena dan menjadi dewa player"
-                  : "Selamat bertanding di Babak $currentRound kawan! Tumbangkan jawara lainnya dan rebut gelar raja puncak dewa player!",
+                  ? "Jadilah juara arena untuk menuju babak berikutnya hingga kamu berada dipuncak arena dan menjadi juara turnamen"
+                  : "Selamat bertanding di Babak $currentRound kawan! Tumbangkan jawara lainnya dan rebut gelar juara turnamen!",
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 14, color: Colors.white),
             ),

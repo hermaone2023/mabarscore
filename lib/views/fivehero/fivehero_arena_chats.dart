@@ -33,18 +33,292 @@ class _FiveheroChatViewState extends State<FiveheroChatView> {
   List<dynamic> _chatMessages = [];
   Timer? _chatTimer;
   bool _isLoading = true;
-  // Default false
-  bool _isUserReady = false; // Default false
-
+  String? _selectedHeroCategory;
+  bool _formSiapTanding = false;
   String? _selectedOpponentId;
 
   // Sesuaikan domain URL direktori gambar di server kawan
   final String _imageBaseUrl =
       "https://donorta.tech/apimabarscore/uploads/chats/";
 
+  // Contoh fungsi pengiriman ke PHP
+  Future<void> _simpanKesepakatanKeServer() async {
+    final url = Uri.parse(
+      'https://donorta.tech/apimabarscore/simpan_kesepakatan.php',
+    );
+
+    try {
+      // 1. Ambil batch_id, round, dan match_number langsung secara presisi dari widget.matchData
+      String batchId = widget.matchData['batch_id']?.toString() ?? "1";
+      String round = widget.matchData['round']?.toString() ?? "1";
+      String matchNumber = widget.matchData['match_number']?.toString() ?? "1";
+
+      print(
+        "DEBUG KIRIM -> Batch: $batchId, Round: $round, Match No: $matchNumber",
+      );
+
+      // 2. Kirim data ke server PHP
+      final response = await http.post(
+        url,
+        body: {
+          'id_home': widget.currentGoogleId,
+          'id_away': widget.opponentGoogleId,
+          'kategori_hero': _selectedHeroCategory ?? '',
+          'status': 'SEPAKAT SIAP TANDING',
+          'arena_id': widget.arenaId.toString(),
+          'batch_id': batchId,
+          'round': round,
+          'match_number':
+              matchNumber, // Sekarang dijamin bernilai 3 (atau sesuai match yang diklik)
+        },
+      );
+
+      print("RAW RESPONSE PHP: ${response.body}");
+
+      final data = jsonDecode(response.body);
+      if (data['status'] == true) {
+        print("Berhasil simpan ke DB: ${data['message']}");
+      } else {
+        print("Gagal simpan ke DB: ${data['message']}");
+      }
+    } catch (e) {
+      print("Terjadi kesalahan koneksi / parsing: $e");
+    }
+  }
+
+  void _tampilkanDialogKesepakatanDanKonfirmasi() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF0D4661),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: const Text(
+                "Kesepakatan & Aturan Tanding MLBB 1 vs 1",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 8),
+                    const Text(
+                      "Pilih Kategori Hero Kesepakatan:",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.black26,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.white24),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _selectedHeroCategory,
+                          hint: const Text(
+                            "Pilih Kategori Hero",
+                            style: TextStyle(
+                              color: Colors.white54,
+                              fontSize: 13,
+                            ),
+                          ),
+                          dropdownColor: const Color(0xFF0C4A60),
+                          isExpanded: true,
+                          items: ['Fighter', 'Assassin', 'Mage'].map((
+                            String category,
+                          ) {
+                            return DropdownMenuItem<String>(
+                              value: category,
+                              child: Text(
+                                category,
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (String? newValue) {
+                            setStateDialog(() {
+                              _selectedHeroCategory = newValue;
+                            });
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Checkbox(
+                          value: _formSiapTanding,
+                          activeColor: const Color(0xFF3AC394),
+                          onChanged: (bool? value) {
+                            setStateDialog(() {
+                              _formSiapTanding = value ?? false;
+                            });
+                          },
+                        ),
+                        const Expanded(
+                          child: Text(
+                            "Saya dan lawan menyatakan siap tanding",
+                            style: TextStyle(color: Colors.white, fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text(
+                    "Batal",
+                    style: TextStyle(color: Colors.white60),
+                  ),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF3AC394),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onPressed: () async {
+                    if (_selectedHeroCategory == null || !_formSiapTanding) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            "Pilih kategori hero & centang siap tanding dulu kawan!",
+                          ),
+                        ),
+                      );
+                      return;
+                    }
+
+                    // 1. Simpan data ke Database MySQL melalui PHP
+                    await _simpanKesepakatanKeServer();
+
+                    // 2. Kirim otomatis hasil kesepakatan ke chat agar terekam oleh lawan
+                    _chatController.text =
+                        "[SISTEM KESEPAKATAN] Kategori Hero: $_selectedHeroCategory | Status: SEPAKAT SIAP TANDING!";
+                    await _kirimPesan();
+
+                    if (context.mounted) {
+                      setState(() {});
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("Kesepakatan berhasil disimpan kawan!"),
+                        ),
+                      );
+                    }
+                  },
+                  child: const Text(
+                    "Simpan & Konfirmasi",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // Fungsi untuk memunculkan Dialog Penjelasan Awal / Briefing Kawan
+  void _tampilkanDialogPenjelasanAwal() {
+    showDialog(
+      context: context, // Menggunakan 'context' bawaan dari State widget kawan!
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF0D4661),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Expanded(
+            child: Text(
+              "Panduan & Tata Cara Tanding BY ONE",
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Text(
+                  "Sebelum melakukan tanding wajib melakukan kesepakatan antara kedua peserta, berikut kesepatakan yang harus dilakukan :",
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+                SizedBox(height: 12),
+                Text(
+                  "1️⃣ Penentuan Posisi (Home / Away)\n"
+                  "• Lakukan kesepakatan Posisi!\n"
+                  "• Peserta yang disepakati sebagai HOME wajib membuat Master Room di MLBB, lalu invite lawan, melakukan pengaturan agar dapat bermain BY ONE atau 1v1 dan melakukan recording pertandingan.\n"
+                  "• Peserta AWAY wajib bersiap di ruang tunggu dan masuk sesuai undangan.",
+                  style: TextStyle(color: Colors.white, fontSize: 12),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  "2️⃣ Aturan Main di dalam In-Game\n"
+                  "• Lane : Wajib bertanding di Mid Lane.\n"
+                  "• Durasi : Maksimal 7 Menit .\n"
+                  "• Pemenang : Dihitung berdasarkan perolehan Kill Terbanyak saat waktu habis\n"
+                  "• Larangan Keras : Dilarang menyerang, mencuri, atau mengganggu *buff* (baik buff sendiri maupun buff tengah/lawan), dilarang keras menggunakan cheat.",
+                  style: TextStyle(color: Colors.white, fontSize: 12),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  "3️⃣ Konfirmasi Kesepakatan\n"
+                  "• Setelah melakukan kesepakatan pemain yang disepakati sebagai HOME harus melakukan Konfirmasi Kesepakatan pada halaman ini dengan klik tombol Konfiramsi Kesepakatan",
+                  style: TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                "Mengerti",
+                style: TextStyle(color: Colors.white60),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   void initState() {
     super.initState();
+    print('==============================>');
+    print("ISI MATCH DATA: ${widget.matchData}");
+
+    print("ISI MATCH DATA: ${widget.opponentGoogleId}");
+    print('<==============================');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _tampilkanDialogPenjelasanAwal();
+    });
     _selectedOpponentId = widget.opponentGoogleId.isNotEmpty
         ? widget.opponentGoogleId
         : null;
@@ -59,10 +333,7 @@ class _FiveheroChatViewState extends State<FiveheroChatView> {
 
     // Cek apakah key-nya benar-benar ada di dalam matchData
     if (widget.currentGoogleId == widget.matchData['player1']?['google_id']) {
-      _isUserReady = widget.matchData['player_1_id_siap'].toString() == "1";
-    } else {
-      _isUserReady = widget.matchData['player_2_id_siap'].toString() == "1";
-    }
+    } else {}
   }
 
   @override
@@ -176,22 +447,42 @@ class _FiveheroChatViewState extends State<FiveheroChatView> {
     }
   }
 
-  Future<void> _updateStatusSiapKeDatabase() async {
-    try {
-      final response = await http.post(
-        Uri.parse("https://donorta.tech/apimabarscore/update_match_status.php"),
-        body: {
-          'match_id': widget.arenaId.toString(),
-          'google_id': widget.currentGoogleId,
-        },
-      );
+  // Fungsi untuk mengecek apakah kedua peserta sudah saling balas chat kawan
+  bool _sudahSalingBalasChat() {
+    bool sayaPernahChat = false;
+    bool lawanPernahChat = false;
 
-      if (response.statusCode == 200) {
-        print("Status berhasil diupdate!");
+    final String targetOpponent =
+        _selectedOpponentId ?? widget.opponentGoogleId;
+
+    for (var chat in _chatMessages) {
+      final String senderId = (chat['sender_google_id'] ?? '').toString();
+      final dynamic isMeRaw = chat['is_me'];
+
+      bool isMe = false;
+      if (isMeRaw != null) {
+        isMe =
+            (isMeRaw == true ||
+            isMeRaw == 1 ||
+            isMeRaw.toString() == "true" ||
+            isMeRaw.toString() == "1");
+      } else if (senderId.isNotEmpty) {
+        isMe = (senderId == widget.currentGoogleId);
       }
-    } catch (e) {
-      print("Error update: $e");
+
+      if (isMe) {
+        sayaPernahChat = true;
+      } else if (senderId == targetOpponent) {
+        lawanPernahChat = true;
+      }
+
+      // Jika keduanya sudah pernah mengirim pesan, langsung return true kawan!
+      if (sayaPernahChat && lawanPernahChat) {
+        return true;
+      }
     }
+
+    return false;
   }
 
   @override
@@ -223,107 +514,7 @@ class _FiveheroChatViewState extends State<FiveheroChatView> {
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
             onPressed: () async {
-              // 1. Cek apakah user sudah siap sebelumnya
-              if (_isUserReady) {
-                // Jika sudah siap, langsung keluar tanpa dialog
-                Navigator.pop(context);
-              } else {
-                // 2. Jika belum siap, tampilkan dialog
-                bool? isAgreed = await showDialog<bool>(
-                  context: context,
-                  barrierDismissible: false,
-                  builder: (context) => Dialog(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    backgroundColor: const Color(0xFF0D4661),
-                    child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.check_circle_outline,
-                            color: Color(0xFF3AC394),
-                            size: 50,
-                          ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            "Konfirmasi Kesepakatan",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            "Apakah kamu telah melakukan kesepakatan aturan tanding dengan lawanmu?",
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextButton(
-                                  onPressed: () => Navigator.pop(
-                                    context,
-                                    false,
-                                  ), // Dialog tutup dengan nilai false
-                                  child: const Text(
-                                    "Belum",
-                                    style: TextStyle(color: Colors.white60),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF3AC394),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                  onPressed: () => Navigator.pop(
-                                    context,
-                                    true,
-                                  ), // Dialog tutup dengan nilai true
-                                  child: const Text(
-                                    "OK, SIAP",
-                                    style: TextStyle(color: Colors.white),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-
-                // 3. Proses hasil dialog
-                if (isAgreed == true) {
-                  // Jika user klik "OK, SIAP"
-                  await _updateStatusSiapKeDatabase();
-                  if (context.mounted) {
-                    setState(() => _isUserReady = true);
-                    Navigator.pop(context); // Keluar halaman
-                  }
-                } else {
-                  // Jika user klik "Belum" atau menutup dialog (isAgreed == false atau null)
-                  if (context.mounted) {
-                    Navigator.pop(
-                      context,
-                    ); // 🔥 TAMBAHKAN INI agar halaman ikut keluar
-                  }
-                }
-              }
+              Navigator.pop(context);
             },
           ),
           actions: [
@@ -338,22 +529,6 @@ class _FiveheroChatViewState extends State<FiveheroChatView> {
         ),
         body: Column(
           children: [
-            // Padding(
-            //   padding: const EdgeInsets.symmetric(
-            //     horizontal: 24.0,
-            //     vertical: 12.0,
-            //   ),
-            //   child: Text(
-            //     "Lakukan kesepakatan untuk membuat arena tanding 1 vs 1 bersama lawanmu kemudian mulailah tanding",
-            //     style: const TextStyle(
-            //       color: Colors.white,
-            //       fontSize: 15,
-            //       height: 1.3,
-            //     ),
-            //     textAlign: TextAlign.center,
-            //   ),
-            // ),
-
             // DROPDOWN
             Container(
               margin: const EdgeInsets.symmetric(
@@ -365,41 +540,106 @@ class _FiveheroChatViewState extends State<FiveheroChatView> {
                 color: AppColors.textMuted.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(30),
               ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: _selectedOpponentId,
-                  hint: const Text(
-                    "Pilih id lawan",
-                    style: TextStyle(color: Colors.black54),
-                  ),
-                  isExpanded: true,
-                  icon: const Icon(
-                    Icons.keyboard_arrow_down,
-                    color: Colors.blue,
-                  ),
-                  items: [
-                    DropdownMenuItem(
-                      value: widget.opponentGoogleId,
-                      child: Text(
-                        widget.opponentGoogleId.isNotEmpty
-                            ? "(${widget.opponentGoogleId})"
-                            : "Tidak ada lawan",
-                      ),
+              child: Visibility(
+                visible: false, // Sembunyikan dropdown lawan kawan
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedOpponentId,
+                    hint: const Text(
+                      "Pilih id lawan",
+                      style: TextStyle(color: Colors.black54),
                     ),
-                  ],
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedOpponentId = value;
-                      _isLoading = true;
-                    });
-                    _ambilRiwayatChat();
-                  },
+                    isExpanded: true,
+                    icon: const Icon(
+                      Icons.keyboard_arrow_down,
+                      color: Colors.blue,
+                    ),
+                    items: [
+                      DropdownMenuItem(
+                        value: widget.opponentGoogleId,
+                        child: Text(
+                          widget.opponentGoogleId.isNotEmpty
+                              ? "(${widget.opponentGoogleId})"
+                              : "Tidak ada lawan",
+                        ),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedOpponentId = value;
+                        _isLoading = true;
+                      });
+                      _ambilRiwayatChat();
+                    },
+                  ),
                 ),
               ),
             ),
 
             const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.only(left: 16, right: 15),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        _tampilkanDialogPenjelasanAwal();
+                      },
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline_rounded, color: Colors.white),
+                          const SizedBox(width: 5),
+                          Text(
+                            'Informasi',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  //const SizedBox(width: 10),
+                  // KODE BARU DENGAN VALIDASI SALING BALAS CHAT KAWAN:
+                  Expanded(
+                    flex: 2,
+                    child: GestureDetector(
+                      onTap: () {
+                        // Validasi: Cek apakah sudah saling balas chat kawan
+                        if (!_sudahSalingBalasChat()) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                "Minimal harus ada saling balas chat terlebih dahulu dengan lawan sebelum membuat kesepakatan kawan!",
+                              ),
+                              backgroundColor: Colors.redAccent,
+                            ),
+                          );
+                          return;
+                        }
 
+                        // Jika sudah saling balas, izinkan buka dialog konfirmasi
+                        _tampilkanDialogKesepakatanDanKonfirmasi();
+                      },
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.published_with_changes_outlined,
+                            color: Colors.white,
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            'Konfir Kesepakatan',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
             // AREA BUBBLE CHAT
             Expanded(
               child: _isLoading
