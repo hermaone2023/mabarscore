@@ -30,6 +30,7 @@ dependencies:
   video_compress: ^3.1.4
   gal: ^2.3.3
   flutter_foreground_task: ^9.2.2
+  android_intent_plus: ^6.1.0
 
 # Konfigurasi Ikon Aplikasi 
 flutter_launcher_icons:

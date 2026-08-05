@@ -9,6 +9,7 @@ import 'package:mabarscore/core/constants/app_colors.dart';
 import 'dart:convert';
 
 import 'package:mabarscore/views/fivehero/fivehero_arena_chats.dart';
+import 'package:mabarscore/views/match_finished_screen.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart'
     hide NotificationVisibility;
@@ -32,7 +33,8 @@ class DetailPertandinganView extends StatefulWidget {
   State<DetailPertandinganView> createState() => _DetailPertandinganViewState();
 }
 
-class _DetailPertandinganViewState extends State<DetailPertandinganView> {
+class _DetailPertandinganViewState extends State<DetailPertandinganView>
+    with WidgetsBindingObserver {
   bool _isLoading = true;
   Map<String, dynamic> _matchData = {};
   late int
@@ -110,7 +112,6 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView> {
       String path = await FlutterScreenRecording.stopRecordScreen;
       print("Path video hasil rekaman: '$path'");
 
-      // Hentikan foreground service karena perekaman sudah selesai
       await FlutterForegroundTask.stopService();
 
       if (path.isEmpty) {
@@ -124,7 +125,7 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView> {
       }
       await Gal.putVideo(path, album: "MabarScore");
 
-      // 🔥 UPLOAD KE SERVER
+      // UPLOAD KE SERVER
       await _uploadVideoToServer(
         arenaId: arenaId,
         batchId: batchId,
@@ -133,10 +134,18 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView> {
         videoPath: path,
       );
 
+      // Bersihkan data sesi
       await prefs.remove('match_arena_id');
       await prefs.remove('match_batch_id');
       await prefs.remove('match_round');
       await prefs.remove('match_number');
+
+      // 🔥 LANGKAH UTAMA: Setelah upload sukses, langsung pindah ke MatchFinishedScreen!
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const MatchFinishedScreen()),
+      );
     } catch (e) {
       print("Gagal menghentikan atau menyimpan rekaman (Exception): $e");
       await FlutterForegroundTask.stopService();
@@ -225,9 +234,36 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView> {
     }
   }
 
+  Future<void> _checkRecordingSignal() async {
+    final prefs = await SharedPreferences.getInstance();
+    bool isFinished = prefs.getBool('stop_recording_signal') ?? false;
+
+    if (isFinished) {
+      // Reset sinyal agar tidak looping
+      await prefs.setBool('stop_recording_signal', false);
+
+      if (!mounted) return;
+
+      // Langsung alihkan ke halaman MatchFinishedScreen
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const MatchFinishedScreen()),
+      );
+      return;
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _checkRecordingSignal();
     _currentRound =
         widget.currentRound; // 🔥 Ambil babak awal dari parameter widget kawan
     _fetchMatchDetails();
@@ -254,6 +290,18 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView> {
         await _stopMainRecording(); // 🔥 Dijalankan di sini agar plugin terbaca dengan normal!
       }
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    if (state == AppLifecycleState.resumed) {
+      print(
+        "Aplikasi kembali aktif dari background kawan! Memeriksa sinyal rekaman...",
+      );
+      _checkRecordingSignal();
+    }
   }
 
   Future<void> _fetchMatchDetails() async {
@@ -664,6 +712,18 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView> {
                                 const SizedBox(height: 20),
                               ],
                               const SizedBox(height: 35),
+                              ElevatedButton(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          MatchFinishedScreen(),
+                                    ),
+                                  );
+                                },
+                                child: const Text("Lihat Hasil Pertandingan"),
+                              ),
                             ],
                           ),
                         ),
