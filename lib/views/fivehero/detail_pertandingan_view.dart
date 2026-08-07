@@ -36,6 +36,7 @@ class DetailPertandinganView extends StatefulWidget {
 class _DetailPertandinganViewState extends State<DetailPertandinganView>
     with WidgetsBindingObserver {
   bool _isLoading = true;
+  bool _isStopping = false;
   Map<String, dynamic> _matchData = {};
   late int
   _currentRound; // 🔥 Gunakan late agar diinisialisasi dari widget di awal
@@ -94,6 +95,16 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView>
   }
 
   Future<void> _stopMainRecording() async {
+    // 🔥 Jika proses stop sudah berjalan, abaikan panggilan berikutnya!
+    if (_isStopping) {
+      print(
+        "Peringatan: _stopMainRecording sedang berjalan, abaikan duplikasi sinyal.",
+      );
+      return;
+    }
+
+    _isStopping = true;
+
     try {
       print("Mengehentikan perekaman utama dan mengambil path video...");
 
@@ -106,6 +117,7 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView>
 
       if (arenaId == null || batchId == null || matchNumber == null) {
         print("Gagal: Parameter unik match tidak lengkap di sesi aktif!");
+        _isStopping = false; // Buka kunci jika gagal di awal
         return;
       }
 
@@ -116,6 +128,7 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView>
 
       if (path.isEmpty) {
         print("Gagal: Path video kosong dari sistem!");
+        _isStopping = false; // Buka kunci jika path kosong
         return;
       }
 
@@ -149,6 +162,7 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView>
     } catch (e) {
       print("Gagal menghentikan atau menyimpan rekaman (Exception): $e");
       await FlutterForegroundTask.stopService();
+      _isStopping = false; // Buka kunci jika terjadi exception
     }
   }
 
@@ -800,6 +814,10 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView>
     bool isUserRight = widget.currentGoogleId == googleIdRight;
     bool isParticipant = isUserLeft || isUserRight;
 
+    // 🔥 Tentukan ID Home dan status Home di sini agar bisa diakses seluruh fungsi
+    final String idHome = matchItemData['id_home']?.toString() ?? '';
+    bool isUserHome = (widget.currentGoogleId == idHome);
+
     // 2. Tentukan siapa ID lawannya
     String idLawan = isUserLeft ? (googleIdRight ?? '') : (googleIdLeft ?? '');
 
@@ -814,6 +832,88 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView>
     int statusKesiapan =
         int.tryParse(matchItemData['status_kesiapan']?.toString() ?? '0') ?? 0;
     bool isSudahSepakat = statusKesiapan == 1;
+
+    // 🔥 LETAKKAN PRINT DI SINI:
+    print("DEBUG VIDEO DATA: ${matchItemData['video_pertandingan']}");
+
+    // 🔥 4. Cek apakah video pertandingan sudah diupload (terisi di database)
+    final dynamic rawVideo =
+        matchItemData['video_pertandingan'] ??
+        matchItemData['video'] ??
+        matchItemData['url_video'];
+
+    final String? videoPertandingan = rawVideo?.toString().trim();
+
+    final bool hasVideo =
+        videoPertandingan != null &&
+        videoPertandingan.isNotEmpty &&
+        videoPertandingan.toLowerCase() != 'null' &&
+        videoPertandingan != '0';
+
+    // 🔥 5. Tentukan Teks, Warna, dan Ikon Tombol
+    String buttonText;
+    Color buttonBgColor;
+    Color buttonBorderColor;
+    Color contentColor;
+    IconData buttonIcon;
+
+    if (!isParticipant) {
+      buttonText = 'Bukan Match Anda';
+      buttonBgColor = Colors.grey.withValues(alpha: 0.1);
+      buttonBorderColor = Colors.white12;
+      contentColor = Colors.white38;
+      buttonIcon = Icons.lock_outline;
+    } else if (matchSelesai) {
+      buttonText = 'Match Telah Selesai';
+      buttonBgColor = Colors.grey.withValues(alpha: 0.15);
+      buttonBorderColor = Colors.white24;
+      contentColor = Colors.white38;
+      buttonIcon = Icons.check_circle_outline;
+    } else if (hasVideo) {
+      buttonText = 'Menunggu Hasil Pemenang';
+      buttonBgColor = Colors.grey.withValues(alpha: 0.1);
+      buttonBorderColor = Colors.white12;
+      contentColor = Colors.white38;
+      buttonIcon = Icons.cloud_done_outlined;
+    } else if (!matchBerlangsung) {
+      buttonText = 'Match Belum Dimulai';
+      buttonBgColor = Colors.grey.withValues(alpha: 0.15);
+      buttonBorderColor = Colors.white24;
+      contentColor = Colors.white38;
+      buttonIcon = Icons.timer_outlined;
+    } else if (isSudahSepakat) {
+      if (isUserHome) {
+        // Tampilan tombol untuk HOME (Room Master) - Bisa diklik untuk mulai
+        buttonText = 'Mulai Tanding';
+        buttonBgColor = const Color.fromARGB(
+          255,
+          18,
+          120,
+          164,
+        ).withValues(alpha: 0.25);
+        buttonBorderColor = const Color.fromARGB(
+          255,
+          128,
+          255,
+          0,
+        ).withValues(alpha: 0.7);
+        contentColor = const Color.fromARGB(255, 81, 255, 0);
+        buttonIcon = Icons.play_arrow;
+      } else {
+        // Tampilan status untuk AWAY - Hanya teks info menunggu
+        buttonText = 'Menunggu Room Master Memulai';
+        buttonBgColor = Colors.grey.withValues(alpha: 0.15);
+        buttonBorderColor = Colors.white24;
+        contentColor = Colors.white38;
+        buttonIcon = Icons.hourglass_top;
+      }
+    } else {
+      buttonText = 'Buat Kesepakatan Match Ini';
+      buttonBgColor = const Color(0xFF145347);
+      buttonBorderColor = Colors.greenAccent.withValues(alpha: 0.6);
+      contentColor = Colors.greenAccent;
+      buttonIcon = Icons.handshake;
+    }
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
@@ -879,10 +979,9 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView>
           const SizedBox(height: 10),
 
           // 🔥 TOMBOL KESEPAKATAN / MULAI TANDING
-          // 🔥 TOMBOL KESEPAKATAN / MULAI TANDING
           GestureDetector(
             onTap: () async {
-              // 🛡️ 1. VALIDASI UTAMA: Apakah user adalah peserta sah? Jika bukan, langsung TOLAK!
+              // 🛡️ 1. Apakah user adalah peserta sah? Jika bukan, langsung TOLAK!
               if (!isParticipant) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -895,7 +994,7 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView>
                 return;
               }
 
-              // 2. Cek apakah match sudah selesai
+              // 🛡️ 2. Cek apakah match sudah selesai (Ditaruh SEBELUM cek video)
               if (matchSelesai) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -908,7 +1007,20 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView>
                 return;
               }
 
-              // 3. Cek apakah match sedang berlangsung
+              // 🛡️ 3. Validasi jika video sudah diupload
+              if (hasVideo) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Video pertandingan sudah diupload! Match ini terkunci.',
+                    ),
+                    backgroundColor: Colors.blueGrey,
+                  ),
+                );
+                return;
+              }
+
+              // 4. Cek apakah match sedang berlangsung
               if (!matchBerlangsung) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -921,7 +1033,7 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView>
                 return;
               }
 
-              // 4. Apakah slot player lengkap
+              // 5. Apakah slot player lengkap
               if (googleIdLeft == null ||
                   googleIdRight == null ||
                   googleIdLeft.isEmpty ||
@@ -937,7 +1049,7 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView>
                 return;
               }
 
-              // 5. Pastikan ID lawan valid
+              // 6. Pastikan ID lawan valid
               if (idLawan.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -948,8 +1060,21 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView>
                 return;
               }
 
-              // 6. Jika sudah sepakat sebagai peserta, jalankan mulai tanding & overlay
+              // 7. Jika sudah sepakat
               if (isSudahSepakat) {
+                // 🔥 Validasi tambahan: Pastikan hanya HOME yang bisa memulai tanding
+                if (!isUserHome) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Hanya peserta berstatus HOME (Room Master) yang dapat memulai pertandingan!',
+                      ),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                  return;
+                }
+
                 final int arenaId =
                     int.tryParse(
                       matchItemData['arena_id']?.toString() ?? '0',
@@ -995,77 +1120,20 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView>
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 9),
               decoration: BoxDecoration(
-                // 🎨 Perbaikan Warna Berdasarkan Kepemilikan Match (isParticipant)
-                color: !isParticipant
-                    ? Colors.grey.withValues(alpha: 0.1)
-                    : (matchSelesai || !matchBerlangsung
-                          ? Colors.grey.withValues(alpha: 0.15)
-                          : (isSudahSepakat
-                                ? const Color.fromARGB(
-                                    255,
-                                    18,
-                                    120,
-                                    164,
-                                  ).withValues(alpha: 0.25)
-                                : const Color(0xFF145347))),
+                color: buttonBgColor,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: !isParticipant
-                      ? Colors.white12
-                      : (matchSelesai || !matchBerlangsung
-                            ? Colors.white24
-                            : (isSudahSepakat
-                                  ? const Color.fromARGB(
-                                      255,
-                                      128,
-                                      255,
-                                      0,
-                                    ).withValues(alpha: 0.7)
-                                  : Colors.greenAccent.withValues(alpha: 0.6))),
-                ),
+                border: Border.all(color: buttonBorderColor),
               ),
               child: Center(
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
-                      !isParticipant
-                          ? Icons.lock_outline
-                          : (matchSelesai
-                                ? Icons.check_circle_outline
-                                : (!matchBerlangsung
-                                      ? Icons.timer_outlined
-                                      : (isSudahSepakat
-                                            ? Icons.play_arrow
-                                            : Icons.handshake))),
-                      color: !isParticipant
-                          ? Colors.white38
-                          : (matchSelesai || !matchBerlangsung
-                                ? Colors.white38
-                                : (isSudahSepakat
-                                      ? const Color.fromARGB(255, 149, 255, 0)
-                                      : Colors.greenAccent)),
-                      size: 16,
-                    ),
+                    Icon(buttonIcon, color: contentColor, size: 16),
                     const SizedBox(width: 6),
                     Text(
-                      !isParticipant
-                          ? 'Bukan Match Anda'
-                          : (matchSelesai
-                                ? 'Match Telah Selesai'
-                                : (!matchBerlangsung
-                                      ? 'Match Belum Dimulai'
-                                      : (isSudahSepakat
-                                            ? 'Mulai Tanding'
-                                            : 'Buat Kesepakatan Match Ini'))),
+                      buttonText,
                       style: TextStyle(
-                        color: !isParticipant
-                            ? Colors.white38
-                            : (matchSelesai || !matchBerlangsung
-                                  ? Colors.white38
-                                  : (isSudahSepakat
-                                        ? const Color.fromARGB(255, 81, 255, 0)
-                                        : Colors.greenAccent)),
+                        color: contentColor,
                         fontWeight: FontWeight.bold,
                         fontSize: 12,
                       ),

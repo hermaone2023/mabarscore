@@ -130,10 +130,10 @@ class _MatchFinishedScreenState extends State<MatchFinishedScreen> {
                       color: Colors.teal.withValues(alpha: 0.15),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
-                      Icons.sports_esports_rounded,
-                      color: Colors.tealAccent,
-                      size: 40,
+                    child: Image.asset(
+                      'assets/images/iconms.png',
+                      width: 64,
+                      height: 64,
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -159,7 +159,7 @@ class _MatchFinishedScreenState extends State<MatchFinishedScreen> {
 
                   // Pesan Pemberitahuan
                   const Text(
-                    "Pertandingan kamu telah selesai dan rekaman layar berhasil diamankan serta di-upload ke server.",
+                    "Pertandingan kamu telah selesai dan saat ini admin sedang memeriksa hasil pertandinganya, cek selalu notifikasi untuk update terbaru.",
                     style: TextStyle(
                       color: Colors.white70,
                       fontSize: 14,
@@ -200,7 +200,7 @@ class _MatchFinishedScreenState extends State<MatchFinishedScreen> {
                         }
                       },
                       child: const Text(
-                        "Lihat Hasil",
+                        "OK",
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,

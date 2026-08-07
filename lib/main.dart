@@ -147,7 +147,7 @@ class _FloatingRecorderWidgetState extends State<FloatingRecorderWidget> {
   bool isExpandedRules = false; // 🔥 Status collapsible aturan pertandingan
   Timer? _timer;
   int _secondsElapsed = 0;
-  final int maxDurationSeconds = (5 * 60) + 25; // 5 menit
+  final int maxDurationSeconds = (1 * 60) + 25; // 5 menit
   final PageController _pageController = PageController();
   String _kategoriHeroKesepakatan = "Memuat...";
 
