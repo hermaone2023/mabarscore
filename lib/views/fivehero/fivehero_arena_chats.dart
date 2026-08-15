@@ -7,12 +7,15 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:mabarscore/core/constants/app_colors.dart';
 import 'package:mabarscore/views/fivehero/detail_gambar_view.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class FiveheroChatView extends StatefulWidget {
   final String arenaId;
   final String currentGoogleId; // ID User yang sedang login kawan
   final String opponentGoogleId; // ID Lawan yang dipilih dari dropdown kawan
   final Map<String, dynamic> matchData;
+  final int round; // 🔥 Tambahkan ini kawan
+  final int matchNumber; // 🔥 Tambahkan ini kawan
 
   const FiveheroChatView({
     Key? key,
@@ -20,6 +23,8 @@ class FiveheroChatView extends StatefulWidget {
     required this.currentGoogleId,
     required this.opponentGoogleId,
     required this.matchData,
+    required this.round, // 🔥 Wajibkan diisi saat dipanggil
+    required this.matchNumber, // 🔥 Wajibkan diisi saat dipanggil
   }) : super(key: key);
 
   @override
@@ -164,6 +169,14 @@ class _FiveheroChatViewState extends State<FiveheroChatView> {
                         Checkbox(
                           value: _formSiapTanding,
                           activeColor: const Color(0xFF3AC394),
+                          fillColor: WidgetStateProperty.resolveWith<Color>((
+                            Set<WidgetState> states,
+                          ) {
+                            if (states.contains(WidgetState.selected)) {
+                              return const Color(0xFF3AC394);
+                            }
+                            return Colors.white54;
+                          }),
                           onChanged: (bool? value) {
                             setStateDialog(() {
                               _formSiapTanding = value ?? false;
@@ -218,12 +231,15 @@ class _FiveheroChatViewState extends State<FiveheroChatView> {
 
                     if (context.mounted) {
                       setState(() {});
-                      Navigator.pop(context);
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text("Kesepakatan berhasil disimpan kawan!"),
                         ),
                       );
+                      Navigator.pop(
+                        context,
+                        true,
+                      ); // Tutup dialog dan kembalikan true
                     }
                   },
                   child: const Text(
@@ -241,68 +257,136 @@ class _FiveheroChatViewState extends State<FiveheroChatView> {
 
   // Fungsi untuk memunculkan Dialog Penjelasan Awal / Briefing Kawan
   void _tampilkanDialogPenjelasanAwal() {
-    showDialog(
-      context: context, // Menggunakan 'context' bawaan dari State widget kawan!
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled:
+          true, // Membuat bottom sheet bisa menyesuaikan tinggi & discroll jika kontennya panjang
+      backgroundColor: Colors
+          .transparent, // Transparan agar border radius container terlihat rapi
       builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF0D4661),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: Expanded(
-            child: Text(
-              "Panduan & Tata Cara Tanding BY ONE",
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-              ),
+        return Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF0D4661), // Warna latar belakang sesuai desain Anda
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(25),
+              topRight: Radius.circular(25),
             ),
           ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text(
-                  "Sebelum melakukan tanding wajib melakukan kesepakatan antara kedua peserta, berikut kesepatakan yang harus dilakukan :",
-                  style: TextStyle(color: Colors.white70, fontSize: 13),
-                ),
-                SizedBox(height: 12),
-                Text(
-                  "1️⃣ Penentuan Posisi (Home / Away)\n"
-                  "• Lakukan kesepakatan Posisi!\n"
-                  "• Peserta yang disepakati sebagai HOME wajib membuat Master Room di MLBB, lalu invite lawan, melakukan pengaturan agar dapat bermain BY ONE atau 1v1 dan melakukan recording pertandingan.\n"
-                  "• Peserta AWAY wajib bersiap di ruang tunggu dan masuk sesuai undangan.",
-                  style: TextStyle(color: Colors.white, fontSize: 12),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  "2️⃣ Aturan Main di dalam In-Game\n"
-                  "• Lane : Wajib bertanding di Mid Lane.\n"
-                  "• Durasi : Maksimal 7 Menit .\n"
-                  "• Pemenang : Dihitung berdasarkan perolehan Kill Terbanyak saat waktu habis\n"
-                  "• Larangan Keras : Dilarang menyerang, mencuri, atau mengganggu *buff* (baik buff sendiri maupun buff tengah/lawan), dilarang keras menggunakan cheat.",
-                  style: TextStyle(color: Colors.white, fontSize: 12),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  "3️⃣ Konfirmasi Kesepakatan\n"
-                  "• Setelah melakukan kesepakatan pemain yang disepakati sebagai HOME harus melakukan Konfirmasi Kesepakatan pada halaman ini dengan klik tombol Konfiramsi Kesepakatan",
-                  style: TextStyle(color: Colors.white, fontSize: 12),
-                ),
-              ],
-            ),
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 15,
+            // Menghindari tertutup keyboard atau bagian bawah layar (SafeArea)
+            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text(
-                "Mengerti",
-                style: TextStyle(color: Colors.white60),
-              ),
-            ),
-          ],
+          child: SafeArea(
+            child: MainAxisSize.min == MainAxisSize.min
+                ? Wrap(
+                    children: [
+                      // Garis indikator kecil di atas (opsional, ciri khas bottom sheet modern)
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          margin: const EdgeInsets.only(bottom: 15),
+                          decoration: BoxDecoration(
+                            color: Colors.white38,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+
+                      // Judul Bottom Sheet
+                      const Text(
+                        "Panduan & Tata Cara Tanding BY ONE",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 15),
+
+                      // Konten Teks Panduan (Bisa discroll)
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight:
+                              MediaQuery.of(context).size.height *
+                              0.6, // Maksimal 60% tinggi layar
+                        ),
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              Text(
+                                "Sebelum melakukan tanding wajib melakukan kesepakatan antara kedua peserta, berikut kesepakatan yang harus dilakukan :",
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              SizedBox(height: 12),
+                              Text(
+                                "📢 Penentuan Posisi (Home / Away)\n"
+                                "• Lakukan kesepakatan Posisi!\n"
+                                "• Peserta yang disepakati sebagai HOME wajib membuat Master Room di MLBB, lalu invite lawan, melakukan pengaturan agar dapat bermain BY ONE atau 1v1 dan melakukan recording pertandingan.\n"
+                                "• Peserta AWAY wajib bersiap di ruang tunggu dan masuk sesuai undangan.",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              SizedBox(height: 12),
+                              Text(
+                                "📢 Aturan Main di dalam In-Game\n"
+                                "• Durasi : Maksimal 5 Menit 25 detik .\n"
+                                "• Pemenang : Dihitung berdasarkan perolehan Kill Terbanyak saat waktu habis\n"
+                                "• Larangan Keras : Dilarang menyerang, mencuri, atau mengganggu *buff* (baik buff sendiri maupun buff tengah/lawan), dilarang keras menggunakan cheat.",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              SizedBox(height: 12),
+                              Text(
+                                "📢 Konfirmasi Kesepakatan\n"
+                                "• Setelah melakukan kesepakatan pemain yang disepakati sebagai HOME harus melakukan Konfirmasi Kesepakatan pada halaman ini dengan klik tombol Konfirmasi Kesepakatan\n\n",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 30),
+
+                      // Tombol Aksi (Mengerti) di bagian bawah
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white24,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text(
+                            "Mengerti",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : const SizedBox.shrink(),
+          ),
         );
       },
     );
@@ -350,13 +434,12 @@ class _FiveheroChatViewState extends State<FiveheroChatView> {
         _selectedOpponentId ?? widget.opponentGoogleId;
     if (targetOpponent.isEmpty) return;
 
+    // 🔥 Menyertakan parameter round dan match_number ke URL API kawan
     final String url =
-        "https://donorta.tech/apimabarscore/get_arena_chats.php?arena_id=${widget.arenaId}&user_id=${widget.currentGoogleId}&opponent_id=$targetOpponent";
+        "https://donorta.tech/apimabarscore/get_arena_chats.php?arena_id=${widget.arenaId}&round=${widget.round}&match_number=${widget.matchNumber}&user_id=${widget.currentGoogleId}&opponent_id=$targetOpponent";
 
     try {
       final response = await http.get(Uri.parse(url));
-
-      // debugPrint("Isi dari GET_ARENA_CHATS kawan: ${response.body}");
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -403,6 +486,10 @@ class _FiveheroChatViewState extends State<FiveheroChatView> {
       var request = http.MultipartRequest('POST', Uri.parse(url));
 
       request.fields['arena_id'] = widget.arenaId;
+      request.fields['round'] = widget.round
+          .toString(); // 🔥 Kirim data round aktif
+      request.fields['match_number'] = widget.matchNumber
+          .toString(); // 🔥 Kirim data nomor match aktif
       request.fields['sender_google_id'] = widget.currentGoogleId;
       request.fields['receiver_google_id'] = targetOpponent;
       request.fields['message'] = pesanTeks;
@@ -485,6 +572,28 @@ class _FiveheroChatViewState extends State<FiveheroChatView> {
     return false;
   }
 
+  Future<void> _launchWhatsAppone() async {
+    final String phoneNumber = "6283180103379";
+    final String message = "Halo Admin, saya butuh bantuan terkait MabarScore.";
+
+    final Uri whatsappUrl = Uri.parse(
+      "https://wa.me/$phoneNumber?text=${Uri.encodeComponent(message)}",
+    );
+
+    if (await canLaunchUrl(whatsappUrl)) {
+      await launchUrl(whatsappUrl, mode: LaunchMode.externalApplication);
+    } else {
+      // Tampilkan error jika WhatsApp tidak terinstall atau gagal
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Gagal membuka WhatsApp. Pastikan WhatsApp sudah terinstall.",
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -514,7 +623,10 @@ class _FiveheroChatViewState extends State<FiveheroChatView> {
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
             onPressed: () async {
-              Navigator.pop(context);
+              Navigator.pop(
+                context,
+                true,
+              ); // Kembalikan true agar halaman sebelumnya tahu ada update chat
             },
           ),
           actions: [
@@ -578,65 +690,168 @@ class _FiveheroChatViewState extends State<FiveheroChatView> {
 
             const SizedBox(height: 16),
             Padding(
-              padding: const EdgeInsets.only(left: 16, right: 15),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () {
-                        _tampilkanDialogPenjelasanAwal();
-                      },
-                      child: Row(
-                        children: [
-                          Icon(Icons.info_outline_rounded, color: Colors.white),
-                          const SizedBox(width: 5),
-                          Text(
-                            'Informasi',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        ],
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics:
+                    const BouncingScrollPhysics(), // Efek pantul saat mentok (opsional)
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // 1. Tombol Info
+                    Container(
+                      decoration: BoxDecoration(
+                        color: const Color.fromARGB(199, 20, 44, 43),
+                        borderRadius: BorderRadius.circular(
+                          20,
+                        ), // Bentuk pill membulat
+                        border: Border.all(
+                          color: const Color(0xFF313D48),
+                          width: 1,
+                        ),
                       ),
-                    ),
-                  ),
-                  //const SizedBox(width: 10),
-                  // KODE BARU DENGAN VALIDASI SALING BALAS CHAT KAWAN:
-                  Expanded(
-                    flex: 2,
-                    child: GestureDetector(
-                      onTap: () {
-                        // Validasi: Cek apakah sudah saling balas chat kawan
-                        if (!_sudahSalingBalasChat()) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                "Minimal harus ada saling balas chat terlebih dahulu dengan lawan sebelum membuat kesepakatan kawan!",
-                              ),
-                              backgroundColor: Colors.redAccent,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(20),
+                          onTap: () {
+                            _tampilkanDialogPenjelasanAwal();
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
                             ),
-                          );
-                          return;
-                        }
-
-                        // Jika sudah saling balas, izinkan buka dialog konfirmasi
-                        _tampilkanDialogKesepakatanDanKonfirmasi();
-                      },
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.published_with_changes_outlined,
-                            color: Colors.white,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(
+                                  Icons.info_outline_rounded,
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Info',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          const SizedBox(width: 5),
-                          Text(
-                            'Konfir Kesepakatan',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+
+                    const SizedBox(width: 8), // Jarak antar tombol
+                    // 2. Tombol Lapor Admin
+                    Container(
+                      decoration: BoxDecoration(
+                        color: const Color.fromARGB(199, 20, 44, 43),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: const Color(0xFF313D48),
+                          width: 1,
+                        ),
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(20),
+                          onTap: () {
+                            _launchWhatsAppone();
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(
+                                  Icons.support_agent_outlined,
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Lapor admin',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(width: 8), // Jarak antar tombol
+                    // 3. Tombol Konfirmasi Kesepakatan
+                    Container(
+                      decoration: BoxDecoration(
+                        color: const Color.fromARGB(199, 20, 44, 43),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: const Color(0xFF313D48),
+                          width: 1,
+                        ),
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(20),
+                          onTap: () {
+                            // Validasi: Cek apakah sudah saling balas chat kawan
+                            if (!_sudahSalingBalasChat()) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    "Minimal harus ada saling balas chat terlebih dahulu dengan lawan sebelum membuat kesepakatan kawan!",
+                                  ),
+                                  backgroundColor: Colors.redAccent,
+                                ),
+                              );
+                              return;
+                            }
+
+                            // Jika sudah saling balas, izinkan buka dialog konfirmasi
+                            _tampilkanDialogKesepakatanDanKonfirmasi();
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(
+                                  Icons.published_with_changes_outlined,
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Konfir Kesepakatan',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 16),

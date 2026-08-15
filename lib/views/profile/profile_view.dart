@@ -1064,145 +1064,145 @@ class _ProfileViewState extends State<ProfileView> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               // Tombol Upload Bukti
-                              GestureDetector(
-                                onTap: () async {
-                                  // 1. Tampilkan loading
-                                  showDialog(
-                                    context: context,
-                                    barrierDismissible: false,
-                                    builder: (context) => const Center(
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  );
+                              // GestureDetector(
+                              //   onTap: () async {
+                              //     // 1. Tampilkan loading
+                              //     showDialog(
+                              //       context: context,
+                              //       barrierDismissible: false,
+                              //       builder: (context) => const Center(
+                              //         child: CircularProgressIndicator(
+                              //           color: Colors.white,
+                              //         ),
+                              //       ),
+                              //     );
 
-                                  // 2. Ambil detail pertandingan dari API
-                                  final matchDetails = await _apiService
-                                      .getActiveMatchId(
-                                        googleId: _currentPlayer!.googleId,
-                                      );
+                              //     // 2. Ambil detail pertandingan dari API
+                              //     final matchDetails = await _apiService
+                              //         .getActiveMatchId(
+                              //           googleId: _currentPlayer!.googleId,
+                              //         );
 
-                                  if (!mounted) return;
-                                  Navigator.pop(context); // Tutup loading
+                              //     if (!mounted) return;
+                              //     Navigator.pop(context); // Tutup loading
 
-                                  // 3. Validasi: Apakah ada pertandingan aktif?
-                                  if (matchDetails == null) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          "Kamu tidak memiliki pertandingan aktif saat ini kawan!",
-                                        ),
-                                        backgroundColor: Colors.orangeAccent,
-                                      ),
-                                    );
-                                    return;
-                                  }
+                              //     // 3. Validasi: Apakah ada pertandingan aktif?
+                              //     if (matchDetails == null) {
+                              //       ScaffoldMessenger.of(context).showSnackBar(
+                              //         const SnackBar(
+                              //           content: Text(
+                              //             "Kamu tidak memiliki pertandingan aktif saat ini kawan!",
+                              //           ),
+                              //           backgroundColor: Colors.orangeAccent,
+                              //         ),
+                              //       );
+                              //       return;
+                              //     }
 
-                                  // 4. Validasi Kesepakatan (Status Siap)
-                                  final int statusP1 =
-                                      int.tryParse(
-                                        matchDetails['player_1_id_siap']
-                                                ?.toString() ??
-                                            '0',
-                                      ) ??
-                                      0;
-                                  final int statusP2 =
-                                      int.tryParse(
-                                        matchDetails['player_2_id_siap']
-                                                ?.toString() ??
-                                            '0',
-                                      ) ??
-                                      0;
+                              //     // 4. Validasi Kesepakatan (Status Siap)
+                              //     final int statusP1 =
+                              //         int.tryParse(
+                              //           matchDetails['player_1_id_siap']
+                              //                   ?.toString() ??
+                              //               '0',
+                              //         ) ??
+                              //         0;
+                              //     final int statusP2 =
+                              //         int.tryParse(
+                              //           matchDetails['player_2_id_siap']
+                              //                   ?.toString() ??
+                              //               '0',
+                              //         ) ??
+                              //         0;
 
-                                  if (statusP1 == 1 && statusP2 == 1) {
-                                    // Jika keduanya sudah siap, lanjut ke halaman upload
-                                    final updatedPlayerFromUpload =
-                                        await Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) =>
-                                                UploadReportView(
-                                                  currentPlayer:
-                                                      _currentPlayer!,
-                                                  matchId:
-                                                      matchDetails['match_id']
-                                                          .toString(),
-                                                ),
-                                          ),
-                                        );
+                              //     if (statusP1 == 1 && statusP2 == 1) {
+                              //       // Jika keduanya sudah siap, lanjut ke halaman upload
+                              //       final updatedPlayerFromUpload =
+                              //           await Navigator.push(
+                              //             context,
+                              //             MaterialPageRoute(
+                              //               builder: (context) =>
+                              //                   UploadReportView(
+                              //                     currentPlayer:
+                              //                         _currentPlayer!,
+                              //                     matchId:
+                              //                         matchDetails['match_id']
+                              //                             .toString(),
+                              //                   ),
+                              //             ),
+                              //           );
 
-                                    if (updatedPlayerFromUpload is Player) {
-                                      setState(() {
-                                        _currentPlayer =
-                                            updatedPlayerFromUpload;
-                                      });
-                                    }
-                                  } else {
-                                    // Jika salah satu belum siap
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          "Tunggu lawanmu untuk menekan tombol 'Siap' sebelum bisa upload bukti!",
-                                        ),
-                                        backgroundColor: Colors.redAccent,
-                                      ),
-                                    );
-                                  }
-                                },
-                                child: Container(
-                                  constraints: BoxConstraints(
-                                    maxWidth:
-                                        MediaQuery.of(context).size.width * 0.7,
-                                  ),
-                                  padding: const EdgeInsets.all(14),
-                                  decoration: BoxDecoration(
-                                    color: const Color(
-                                      0xFF073A4B,
-                                    ).withValues(alpha: 0.4),
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(color: Colors.white10),
-                                  ),
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.center,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Image.asset(
-                                        'assets/images/upload.png',
-                                        width: 60,
-                                      ),
-                                      const SizedBox(width: 10),
-                                      const Flexible(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Text(
-                                              "UPLOAD BUKTI",
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 15,
-                                              ),
-                                            ),
-                                            SizedBox(height: 4),
-                                            Text(
-                                              "Upload bukti pertandingan kalah atau menang disini",
-                                              style: TextStyle(
-                                                color: Colors.white70,
-                                                fontSize: 12,
-                                                height: 1.2,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
+                              //       if (updatedPlayerFromUpload is Player) {
+                              //         setState(() {
+                              //           _currentPlayer =
+                              //               updatedPlayerFromUpload;
+                              //         });
+                              //       }
+                              //     } else {
+                              //       // Jika salah satu belum siap
+                              //       ScaffoldMessenger.of(context).showSnackBar(
+                              //         const SnackBar(
+                              //           content: Text(
+                              //             "Tunggu lawanmu untuk menekan tombol 'Siap' sebelum bisa upload bukti!",
+                              //           ),
+                              //           backgroundColor: Colors.redAccent,
+                              //         ),
+                              //       );
+                              //     }
+                              //   },
+                              //   child: Container(
+                              //     constraints: BoxConstraints(
+                              //       maxWidth:
+                              //           MediaQuery.of(context).size.width * 0.7,
+                              //     ),
+                              //     padding: const EdgeInsets.all(14),
+                              //     decoration: BoxDecoration(
+                              //       color: const Color(
+                              //         0xFF073A4B,
+                              //       ).withValues(alpha: 0.4),
+                              //       borderRadius: BorderRadius.circular(20),
+                              //       border: Border.all(color: Colors.white10),
+                              //     ),
+                              //     child: Row(
+                              //       crossAxisAlignment:
+                              //           CrossAxisAlignment.center,
+                              //       mainAxisSize: MainAxisSize.min,
+                              //       children: [
+                              //         Image.asset(
+                              //           'assets/images/upload.png',
+                              //           width: 60,
+                              //         ),
+                              //         const SizedBox(width: 10),
+                              //         const Flexible(
+                              //           child: Column(
+                              //             crossAxisAlignment:
+                              //                 CrossAxisAlignment.start,
+                              //             mainAxisSize: MainAxisSize.min,
+                              //             children: [
+                              //               Text(
+                              //                 "UPLOAD BUKTI",
+                              //                 style: TextStyle(
+                              //                   color: Colors.white,
+                              //                   fontWeight: FontWeight.bold,
+                              //                   fontSize: 15,
+                              //                 ),
+                              //               ),
+                              //               SizedBox(height: 4),
+                              //               Text(
+                              //                 "Upload bukti pertandingan kalah atau menang disini",
+                              //                 style: TextStyle(
+                              //                   color: Colors.white70,
+                              //                   fontSize: 12,
+                              //                   height: 1.2,
+                              //                 ),
+                              //               ),
+                              //             ],
+                              //           ),
+                              //         ),
+                              //       ],
+                              //     ),
+                              //   ),
+                              // ),
                               const SizedBox(width: 12),
 
                               // Tombol Dokumentasi
@@ -1435,7 +1435,7 @@ class _ProfileViewState extends State<ProfileView> {
                           );
                         },
                       ),
-                      const SizedBox(height: 30),
+                      const SizedBox(height: 60),
                     ],
                   ),
                 ),

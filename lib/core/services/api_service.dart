@@ -494,8 +494,9 @@ class ApiService {
         // Mengonversi response JSON dari PHP menjadi Map
         return jsonDecode(response.body);
       } else {
+        debugPrint("Response Error dari PHP: ${response.body}");
         throw Exception(
-          'Gagal membuat transaksi, status code: ${response.statusCode}',
+          'Gagal membuat transaksi, status code: ${response.statusCode}, Body: ${response.body}',
         );
       }
     } catch (e) {

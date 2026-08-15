@@ -332,6 +332,7 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView>
 
       if (response.statusCode == 200) {
         final result = json.decode(response.body);
+        print("DEBUG RESPONS REFRESH: $result");
         if (result['status'] == 'success') {
           setState(() {
             _matchData = result['data'];
@@ -1104,7 +1105,8 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView>
               }
 
               // Jika belum sepakat, buka halaman chat kesepakatan
-              Navigator.push(
+              // Jika belum sepakat, buka halaman chat kesepakatan dan tunggu hasilnya
+              final bool? isUpdated = await Navigator.push<bool>(
                 context,
                 MaterialPageRoute(
                   builder: (context) => FiveheroChatView(
@@ -1112,9 +1114,27 @@ class _DetailPertandinganViewState extends State<DetailPertandinganView>
                     currentGoogleId: widget.currentGoogleId,
                     opponentGoogleId: idLawan,
                     matchData: matchItemData,
+                    round:
+                        int.tryParse(
+                          matchItemData['round']?.toString() ?? '1',
+                        ) ??
+                        1, // 🔥 Ambil round dari matchItemData
+                    matchNumber:
+                        int.tryParse(
+                          matchItemData['match_number']?.toString() ?? '1',
+                        ) ??
+                        1, // 🔥 Ambil match_number dari matchItemData
                   ),
                 ),
               );
+
+              // Jika kembali dari chat dengan status true (berhasil sepakat),
+              // otomatis refresh data pertandingan agar tombol berubah jadi "Mulai Tanding"
+              if (isUpdated == true) {
+                print("DEBUG: Memanggil ulang _fetchMatchDetails()...");
+                await _fetchMatchDetails();
+                print("DEBUG: _fetchMatchDetails() selesai dijalankan.");
+              }
             },
             child: Container(
               width: double.infinity,

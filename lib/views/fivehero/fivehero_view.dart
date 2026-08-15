@@ -4,6 +4,7 @@ import 'package:mabarscore/core/constants/app_colors.dart';
 import 'package:mabarscore/core/services/api_service.dart';
 import 'package:mabarscore/views/fivehero/fivehero_detail_view.dart';
 import 'package:mabarscore/views/fivehero/jadwal_batch_page.dart';
+import 'package:mabarscore/views/profile/dokumentasi.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class FiveheroView extends StatefulWidget {
@@ -26,6 +27,24 @@ class _FiveheroViewState extends State<FiveheroView> {
   String winnerName = "";
   String winnerPhoto = "";
   String winnerGoogleId = "";
+
+  bool _isFirstLoad = true;
+  static const String _prefKeyJanganTampilkan =
+      'jangan_tampilkan_aturan_turnamen';
+
+  Future<void> _cekStatusDanTampilkanBottomSheet() async {
+    final prefs = await SharedPreferences.getInstance();
+    final bool janganTampilkan =
+        prefs.getBool(_prefKeyJanganTampilkan) ?? false;
+
+    // Gunakan print biasa agar pasti tampil di Logcat/Terminal Android Studio
+    print("Status Jangan Tampilkan Lagi: $janganTampilkan");
+
+    // Jika belum pernah dicentang dan widget aktif, tampilkan bottom sheet otomatis
+    if (!janganTampilkan && mounted) {
+      _showAturanTurnamenBottomSheet();
+    }
+  }
 
   // KAWAN: Fungsi untuk memotong nama batch agar rapi di UI (misal BATCH-1 -> BATCH)
   String _cleanBatchName(String rawName) {
@@ -137,6 +156,195 @@ class _FiveheroViewState extends State<FiveheroView> {
   void initState() {
     super.initState();
     _initData();
+    if (_isFirstLoad) {
+      _isFirstLoad = false;
+      // 🔥 Cukup panggil pengecekan SharedPreferences di sini secara aman
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _cekStatusDanTampilkanBottomSheet();
+      });
+    }
+  }
+
+  void _showAturanTurnamenBottomSheet() {
+    bool janganTampilkanLagi = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color.fromARGB(
+        233,
+        14,
+        34,
+        36,
+      ), // Warna tema gelap selaras
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+      ),
+      builder: (context) {
+        // 🔥 Bungkus dengan StatefulBuilder agar checkbox reaktif dan setStateModal dikenali
+        return StatefulBuilder(
+          builder: (context, setStateModal) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 24,
+                right: 24,
+                top: 24,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // Garis Indikator Atas
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Judul
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Image.asset('assets/images/iconms.png', height: 30),
+                      const SizedBox(
+                        height: 8,
+                      ), // Perbaikan dari SizedBox(width: 8) karena dalam Column
+                      const Text(
+                        "Selamat datang di Mabarscore",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Aturan & Tata Cara Singkat
+                  const Text(
+                    "Mabarscore adalah platform penyedian turnamen online yang saat ini fokus ke turnamen Mobile Legends Bang Bang, untuk mengetahui aturan dan tata cara mengikuti turnamen, silakan baca dokumentasi lengkapnya di halaman dokumentasi. Pastikan kamu membaca dan memahami aturan main dengan baik.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 14,
+                      height: 1.6,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Checkbox "Jangan Tampilkan Lagi"
+                  Row(
+                    children: [
+                      SizedBox(
+                        height: 24,
+                        width: 24,
+                        child: Checkbox(
+                          value: janganTampilkanLagi,
+                          activeColor: Colors.greenAccent,
+                          checkColor: Colors.black,
+                          side: const BorderSide(color: Colors.white54),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          onChanged: (bool? value) {
+                            setStateModal(() {
+                              janganTampilkanLagi = value ?? false;
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      const Text(
+                        "Jangan tampilkan lagi",
+                        style: TextStyle(color: Colors.white60, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Tombol Baca Selengkapnya Dokumentasi
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context); // Tutup bottom sheet dulu
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                const DokumentasiView(), // Ganti dengan halaman dokumentasi lengkap Anda
+                          ),
+                        );
+                      },
+                      icon: const Icon(
+                        Icons.book_outlined,
+                        color: Colors.amberAccent,
+                        size: 18,
+                      ),
+                      label: const Text(
+                        "Baca Selengkapnya",
+                        style: TextStyle(
+                          color: Colors.amberAccent,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.amberAccent),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Tombol Mengerti
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        // 🔥 Simpan ke SharedPreferences jika opsi "Jangan tampilkan lagi" dicentang
+                        if (janganTampilkanLagi) {
+                          final prefs = await SharedPreferences.getInstance();
+                          await prefs.setBool(_prefKeyJanganTampilkan, true);
+                          print("BERHASIL MENYIMPAN: true");
+                        }
+                        if (context.mounted) Navigator.pop(context);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF145347),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      child: const Text(
+                        "Mengerti",
+                        style: TextStyle(
+                          color: Colors.greenAccent,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
@@ -195,9 +403,26 @@ class _FiveheroViewState extends State<FiveheroView> {
                                         71,
                                       ),
                                     ),
-                                    child: Text(
-                                      "Silahkan pilih salah satu arena 1 - 50",
-                                      style: TextStyle(color: Colors.white24),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          "Silahkan pilih salah satu arena 1 - 50",
+                                          style: TextStyle(color: Colors.white),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        IconButton(
+                                          padding: EdgeInsets.zero,
+                                          onPressed: () {
+                                            _showAturanTurnamenBottomSheet();
+                                          },
+                                          icon: const Icon(
+                                            Icons.info_outline_rounded,
+                                            color: Colors.lightGreenAccent,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                   const SizedBox(height: 15),

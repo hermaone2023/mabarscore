@@ -12,9 +12,30 @@ class _DokumentasiViewState extends State<DokumentasiView> {
   // Status untuk membuka/menutup accordion petunjuk kawan
   bool _isExpanded = false;
 
-  Future<void> _launchWhatsApp() async {
-    // Ganti dengan nomor WhatsApp admin kamu (gunakan format internasional tanpa +)
-    final String phoneNumber = "6281234567890";
+  Future<void> _launchWhatsAppone() async {
+    final String phoneNumber = "6283180103379";
+    final String message = "Halo Admin, saya butuh bantuan terkait MabarScore.";
+
+    final Uri whatsappUrl = Uri.parse(
+      "https://wa.me/$phoneNumber?text=${Uri.encodeComponent(message)}",
+    );
+
+    if (await canLaunchUrl(whatsappUrl)) {
+      await launchUrl(whatsappUrl, mode: LaunchMode.externalApplication);
+    } else {
+      // Tampilkan error jika WhatsApp tidak terinstall atau gagal
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Gagal membuka WhatsApp. Pastikan WhatsApp sudah terinstall.",
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _launchWhatsApptwo() async {
+    final String phoneNumber = "6285240739812";
     final String message = "Halo Admin, saya butuh bantuan terkait MabarScore.";
 
     final Uri whatsappUrl = Uri.parse(
@@ -419,7 +440,7 @@ class _DokumentasiViewState extends State<DokumentasiView> {
                       const SizedBox(height: 30),
                       GestureDetector(
                         onTap: () {
-                          _launchWhatsApp();
+                          _launchWhatsAppone();
                         },
                         child: Container(
                           width: double.infinity,
@@ -466,6 +487,57 @@ class _DokumentasiViewState extends State<DokumentasiView> {
                           ),
                         ),
                       ),
+                      const SizedBox(height: 30),
+                      GestureDetector(
+                        onTap: () {
+                          _launchWhatsApptwo();
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          padding: EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF145E6A).withValues(
+                              alpha: 0.4,
+                            ), // Warna semi transparan gelap
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Row(
+                            children: [
+                              Image.asset(
+                                'assets/images/adminsupport.png',
+                                width: 50,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'SUPPORT ADMIN',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Kamu butuh bantuan terkait mabarscore silahkan hubungi admin kami pada jam kerja',
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 13,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 3,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 30),
                     ],
                   ),
                 ),
